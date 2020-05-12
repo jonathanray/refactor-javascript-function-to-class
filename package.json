@@ -10,20 +10,20 @@
   "scripts": {
     "test": "jest",
     "lint": "eslint ./src/**",
-    "prepublish": "tsc -p ."
+    "build": "tsc -p ."
   },
   "devDependencies": {
-    "@types/babel__traverse": "^7.0.10",
+    "@types/babel__traverse": "^7.0.11",
     "@types/jest": "^25.2.1",
     "@typescript-eslint/eslint-plugin": "^2.32.0",
     "@typescript-eslint/parser": "^2.32.0",
-    "eslint": "^7.0.0",
-    "jest": "^26.0.1",
+    "eslint": "^6.8.0",
+    "jest": "^25.5.4",
     "ts-jest": "^25.5.1",
     "typescript": "^3.8.3"
   },
   "dependencies": {
-    "@babel/core": "^7.9.0",
+    "@babel/core": "^7.9.6",
     "@babel/generator": "^7.9.6",
     "@babel/parser": "^7.9.6",
     "@babel/preset-env": "^7.9.6",
