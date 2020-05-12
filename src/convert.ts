@@ -469,25 +469,3 @@ export class FunctionToClassConverter {
 		return undefined; // babelTypes.typeAnnotation(babelTypes.anyTypeAnnotation());
 	}
 }
-
-const source = `							
-function TestService($http, someService) {
-	var self = this;
-	self.something = 'something';
-
-	self.doSomething1 = function doSomething1() {
-		return something;
-	}
-
-	var doSomething2 = function doNotUseThisName() {
-		return self.something;
-	}
-
-	this.doSomething2 = doSomething2;
-
-	function testAngular() {
-		return $http.get('http://').then(function(response) { return response.data; });
-	}
-}`;
-
-FunctionToClassConverter.convertFunctionToTypeScriptClass(source).trim();
