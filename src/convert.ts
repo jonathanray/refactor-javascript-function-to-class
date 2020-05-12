@@ -25,7 +25,7 @@ const angularServices: Record<string, string> = {
 	$window: 'IWindowService'
 };
 
-export class FunctionToClassConverter {
+class FunctionToClassConverter {
 	properties: babelTypes.ClassProperty[] = [];
 	methods: babelTypes.ClassMethod[] = [];
 	ctor?: babelTypes.ClassMethod;
@@ -39,15 +39,7 @@ export class FunctionToClassConverter {
 		// Cannot be publicly constructed
 	}
 
-	static convertFunctionToES6Class(source: string): string {
-		return this.convertFunctionToClass(source, false);
-	}
-
-	static convertFunctionToTypeScriptClass(source: string): string {
-		return this.convertFunctionToClass(source, true);
-	}
-
-	private static convertFunctionToClass(source: string, annotateTypes: boolean): string {
+	static convertFunctionToClass(source: string, annotateTypes: boolean): string {
 		if (!source?.trim()) return source;
 		if (source.trim().indexOf('function') === -1) return source; //throw Error('Source is not a function');
 
@@ -489,4 +481,8 @@ export class FunctionToClassConverter {
 		}
 		return undefined; // babelTypes.typeAnnotation(babelTypes.anyTypeAnnotation());
 	}
+}
+
+export function convertFunctionToClass(source: string, annotateTypes: boolean): string {
+	return FunctionToClassConverter.convertFunctionToClass(source, annotateTypes);
 }

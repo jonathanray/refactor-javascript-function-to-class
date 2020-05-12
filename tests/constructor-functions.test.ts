@@ -1,6 +1,6 @@
-import { FunctionToClassConverter } from '../src/convert';
+import { convertFunctionToClass } from '../src/convert';
 
-describe('convertFunctionToTypescriptClass', () => {
+describe('convertFunctionToClass', () => {
 	const expected = cleanSource(`
 			class TestService {
 				something: string;
@@ -44,7 +44,7 @@ describe('convertFunctionToTypescriptClass', () => {
 				}
 			}`);
 
-		const result = FunctionToClassConverter.convertFunctionToTypeScriptClass(source).trim();
+		const result = convertFunctionToClass(source, true).trim();
 		expect(result).toBe(expected);
 	});
 
@@ -71,7 +71,7 @@ describe('convertFunctionToTypescriptClass', () => {
 				}
 			}`);
 
-		const result = FunctionToClassConverter.convertFunctionToTypeScriptClass(source).trim();
+		const result = convertFunctionToClass(source, true).trim();
 		expect(result).toBe(expected);
 	});
 });
