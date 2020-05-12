@@ -2,7 +2,7 @@ import * as babelTypes from '@babel/types';
 import generate, { GeneratorOptions } from '@babel/generator';
 import traverse from '@babel/traverse';
 import { parse, ParserOptions } from '@babel/parser';
-import { sortBy, flatten, uniq } from 'lodash';
+import { sortBy, orderBy, flatten, uniq } from 'lodash';
 
 const parseOptions: ParserOptions = {
 	sourceType: 'module',
@@ -68,10 +68,21 @@ export class FunctionToClassConverter {
 		let output: string = generate(classDeclaration, babelGeneratorOptions).code;
 
 		// babel generator doesn't allow formatting options. No need to use prettier just for indentation.
+		output = FunctionToClassConverter.indentLikeSource(source, output);
+
+		return output;
+	}
+
+	private static indentLikeSource(source: string, output: string): string {
 		const sourceIndentation = this.detectIndentation(source);
 		const outputIndentation = this.detectIndentation(output);
+
 		if (sourceIndentation && outputIndentation && sourceIndentation !== outputIndentation) {
-			output = output.replace(new RegExp(outputIndentation, 'g'), sourceIndentation);
+			const indentationRegex = new RegExp(`\n(${outputIndentation})+`, 'g');
+			output = output.replace(indentationRegex, match => {
+				const levels = match.substr(1).length / outputIndentation.length;
+				return '\n' + ''.padStart(levels * sourceIndentation.length, sourceIndentation);
+			});
 		}
 
 		if (output.substr(output.length - 3, 2) === '\n\n') {
@@ -85,12 +96,12 @@ export class FunctionToClassConverter {
 		if (!source) return '';
 		if (source.includes('\n\t')) return '\t';
 
-		const matches = uniq(source.match(/\n +/g)?.map(m => m.substr(1)) || []);
+		const matches = uniq(source.match(/\n +(?!\*)/g)?.map(m => m.substr(1)) || []);
 		if (matches.length === 0) return '';
 		if (matches.length === 1) return matches[0];
 
-		const sorted = sortBy(matches);
-		const len = Math.ceil(sorted[sorted.length - 1].length / sorted[0].length);
+		const sorted = orderBy(matches, m => m.length, 'desc');
+		const len = sorted[0].length - sorted[1].length;
 		return ''.padStart(len, ' ');
 	}
 
@@ -140,7 +151,7 @@ export class FunctionToClassConverter {
 			this.methods.unshift(this.ctor);
 		}
 
-		if (this.ctor.body.body.length > 0) {
+		if (this.ctor.body.body.length > 0 || this.ctor.params.length > 0) {
 			this.methods.unshift(this.ctor);
 		}
 

@@ -57,10 +57,18 @@ var FunctionToClassConverter = /** @class */ (function () {
         }
         var output = generator_1.default(classDeclaration, babelGeneratorOptions).code;
         // babel generator doesn't allow formatting options. No need to use prettier just for indentation.
+        output = FunctionToClassConverter.indentLikeSource(source, output);
+        return output;
+    };
+    FunctionToClassConverter.indentLikeSource = function (source, output) {
         var sourceIndentation = this.detectIndentation(source);
         var outputIndentation = this.detectIndentation(output);
         if (sourceIndentation && outputIndentation && sourceIndentation !== outputIndentation) {
-            output = output.replace(new RegExp(outputIndentation, 'g'), sourceIndentation);
+            var indentationRegex = new RegExp("\n(" + outputIndentation + ")+", 'g');
+            output = output.replace(indentationRegex, function (match) {
+                var levels = match.substr(1).length / outputIndentation.length;
+                return '\n' + ''.padStart(levels * sourceIndentation.length, sourceIndentation);
+            });
         }
         if (output.substr(output.length - 3, 2) === '\n\n') {
             output = output.substr(0, output.length - 2) + output[output.length - 1];
@@ -73,13 +81,13 @@ var FunctionToClassConverter = /** @class */ (function () {
             return '';
         if (source.includes('\n\t'))
             return '\t';
-        var matches = lodash_1.uniq(((_a = source.match(/\n +/g)) === null || _a === void 0 ? void 0 : _a.map(function (m) { return m.substr(1); })) || []);
+        var matches = lodash_1.uniq(((_a = source.match(/\n +(?!\*)/g)) === null || _a === void 0 ? void 0 : _a.map(function (m) { return m.substr(1); })) || []);
         if (matches.length === 0)
             return '';
         if (matches.length === 1)
             return matches[0];
-        var sorted = lodash_1.sortBy(matches);
-        var len = Math.ceil(sorted[sorted.length - 1].length / sorted[0].length);
+        var sorted = lodash_1.orderBy(matches, function (m) { return m.length; }, 'desc');
+        var len = sorted[0].length - sorted[1].length;
         return ''.padStart(len, ' ');
     };
     FunctionToClassConverter.prototype.getLastStatement = function (block) {
@@ -126,7 +134,7 @@ var FunctionToClassConverter = /** @class */ (function () {
         if (this.onInit.body.body.length > 0) {
             this.methods.unshift(this.ctor);
         }
-        if (this.ctor.body.body.length > 0) {
+        if (this.ctor.body.body.length > 0 || this.ctor.params.length > 0) {
             this.methods.unshift(this.ctor);
         }
         this.convertIdentifiersToMemberExpressions();

@@ -12,6 +12,7 @@ export declare class FunctionToClassConverter {
     static convertFunctionToES6Class(source: string): string;
     static convertFunctionToTypeScriptClass(source: string): string;
     private static convertFunctionToClass;
+    private static indentLikeSource;
     private static detectIndentation;
     getLastStatement(block: babelTypes.BlockStatement): babelTypes.Statement | undefined;
     convertFactory(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration | false;

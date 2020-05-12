@@ -72,7 +72,7 @@ describe('convertFunctionToTypescriptClass', () => {
 			
 				// Comment before testAngular
 				/*
-				 * Mult-line comments before testAngular
+				 * Multi-line comments before testAngular
 				 */
 				function testAngular() {
 					return $http.get('http://').then(function(response) { return response.data; });
@@ -108,7 +108,7 @@ describe('convertFunctionToTypescriptClass', () => {
 				// Comment before testAngular
 			
 				/*
-				 * Mult-line comments before testAngular
+				 * Multi-line comments before testAngular
 				 */
 				testAngular() {
 					return this.$http.get('http://').then(response => response.data);
