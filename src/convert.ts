@@ -1,8 +1,11 @@
 import * as babelTypes from '@babel/types';
 import generate, { GeneratorOptions } from '@babel/generator';
-import traverse from '@babel/traverse';
 import { parse, ParserOptions } from '@babel/parser';
-import { sortBy, orderBy, flatten, uniq } from 'lodash';
+import traverse from '@babel/traverse';
+import flatten from 'lodash/flatten';
+import orderBy from 'lodash/orderBy';
+import sortBy from 'lodash/sortBy';
+import uniq from 'lodash/uniq';
 
 const parseOptions: ParserOptions = {
 	sourceType: 'module',

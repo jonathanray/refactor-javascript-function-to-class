@@ -2,27 +2,18 @@
   "name": "convert-javascript-function-to-class",
   "version": "0.1.0",
   "license": "MIT",
-  "main": "dist/convert.js",
-  "types": "dist/convert.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "author": {
     "name": "Jonathan Ray"
   },
   "scripts": {
     "test": "jest",
     "lint": "eslint ./src/**",
-    "build": "tsc -p ."
+    "build": "rimraf dist/ && webpack && npm run renameDeclaration",
+    "renameDeclaration": "node -e \"require('fs').renameSync('dist/convert.d.ts', 'dist/index.d.ts')\""
   },
   "devDependencies": {
-    "@types/babel__traverse": "^7.0.11",
-    "@types/jest": "^25.2.1",
-    "@typescript-eslint/eslint-plugin": "^2.32.0",
-    "@typescript-eslint/parser": "^2.32.0",
-    "eslint": "^6.8.0",
-    "jest": "^25.5.4",
-    "ts-jest": "^25.5.1",
-    "typescript": "^3.8.3"
-  },
-  "dependencies": {
     "@babel/core": "^7.9.6",
     "@babel/generator": "^7.9.6",
     "@babel/parser": "^7.9.6",
@@ -30,6 +21,19 @@
     "@babel/preset-typescript": "^7.9.0",
     "@babel/types": "^7.9.6",
     "@types/lodash": "^4.14.150",
-    "lodash": "^4.17.15"
+    "@types/babel__traverse": "^7.0.11",
+    "@types/jest": "^25.2.1",
+    "@typescript-eslint/eslint-plugin": "^2.32.0",
+    "@typescript-eslint/parser": "^2.32.0",
+    "declaration-bundler-webpack-plugin": "^1.0.3",
+    "eslint": "^6.8.0",
+    "jest": "^25.5.4",
+    "lodash": "^4.17.15",
+    "rimraf": "^3.0.2",
+    "ts-jest": "^25.5.1",
+    "ts-loader": "^7.0.4",
+    "typescript": "^3.8.3",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
   }
 }
