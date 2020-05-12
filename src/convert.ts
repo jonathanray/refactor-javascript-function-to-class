@@ -1,5 +1,4 @@
 import * as babelTypes from '@babel/types';
-import { format, Options as PrettierOptions } from 'prettier';
 import generate, { GeneratorOptions } from '@babel/generator';
 import traverse from '@babel/traverse';
 import { parse, ParserOptions } from '@babel/parser';
@@ -12,18 +11,7 @@ const parseOptions: ParserOptions = {
 };
 
 const babelGeneratorOptions: GeneratorOptions = {
-	comments: true,
-	// indent: {
-	// 	style: '\t'
-	// }
-};
-
-const prettierOptions: PrettierOptions = {
-	parser: 'typescript',
-	semi: true,
-	singleQuote: true,
-	useTabs: true,
-	// printWidth: 100
+	comments: true
 };
 
 const angularServices = {
