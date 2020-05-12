@@ -14,7 +14,7 @@ const babelGeneratorOptions: GeneratorOptions = {
 	comments: true
 };
 
-const angularServices = {
+const angularServices: Record<string, string> = {
 	$document: 'IDocumentService',
 	$http: 'IHttpService',
 	$interval: 'IIntervalService',
@@ -26,21 +26,17 @@ const angularServices = {
 };
 
 export class FunctionToClassConverter {
-	properties: babelTypes.ClassProperty[];
-	methods: babelTypes.ClassMethod[];
-	ctor: babelTypes.ClassMethod;
-	onInit: babelTypes.ClassMethod;
-	idMap: Record<string, babelTypes.Node>;
-	copiedComments: number[];
-	contextAlias: string;
-	annotateTypes: boolean;
-	isConstructorFunction: any;
+	properties: babelTypes.ClassProperty[] = [];
+	methods: babelTypes.ClassMethod[] = [];
+	ctor?: babelTypes.ClassMethod;
+	onInit?: babelTypes.ClassMethod;
+	idMap: Record<string, babelTypes.Node> = {};
+	copiedComments: number[] = [];
+	contextAlias?: string;
+	annotateTypes: boolean = false;
 
 	private constructor() {
-		this.methods = [];
-		this.properties = [];
-		this.copiedComments = [];
-		this.idMap = {};
+		// Cannot be publicly constructed
 	}
 
 	static convertFunctionToES6Class(source: string): string {
@@ -86,9 +82,10 @@ export class FunctionToClassConverter {
 	}
 
 	private static detectIndentation(source: string): string {
+		if (!source) return '';
 		if (source.includes('\n\t')) return '\t';
 
-		const matches = uniq(source.match(/\n +/g).map(m => m.substr(1)));
+		const matches = uniq(source.match(/\n +/g)?.map(m => m.substr(1)) || []);
 		if (matches.length === 0) return '';
 		if (matches.length === 1) return matches[0];
 
@@ -150,7 +147,11 @@ export class FunctionToClassConverter {
 		this.convertIdentifiersToMemberExpressions();
 		this.convertFunctionExpressionsToArrowFunctionExpressions();
 
-		const body = babelTypes.classBody([].concat(this.properties).concat(this.methods));
+		const stmts: Array<babelTypes.ClassProperty | babelTypes.ClassMethod> = [];
+		stmts.push(...this.properties);
+		stmts.push(...this.methods);
+
+		const body = babelTypes.classBody(stmts);
 		const classDeclaration = babelTypes.classDeclaration(func.id, null, body, null);
 
 		return classDeclaration;
@@ -190,7 +191,11 @@ export class FunctionToClassConverter {
 		this.convertIdentifiersToMemberExpressions();
 		this.convertFunctionExpressionsToArrowFunctionExpressions();
 
-		const body = babelTypes.classBody([].concat(this.properties).concat(this.methods));
+		const stmts: Array<babelTypes.ClassProperty | babelTypes.ClassMethod> = [];
+		stmts.push(...this.properties);
+		stmts.push(...this.methods);
+
+		const body = babelTypes.classBody(stmts);
 		const classDeclaration = babelTypes.classDeclaration(func.id, null, body, null);
 
 		return classDeclaration;
@@ -214,7 +219,7 @@ export class FunctionToClassConverter {
 		return alias;
 	}
 
-	createClassConstructor(func: babelTypes.FunctionDeclaration = null): babelTypes.ClassMethod {
+	createClassConstructor(func?: babelTypes.FunctionDeclaration): babelTypes.ClassMethod {
 		const id = babelTypes.identifier('constructor');
 		const blockStmt = babelTypes.blockStatement([]);
 
@@ -237,7 +242,7 @@ export class FunctionToClassConverter {
 		return babelTypes.classMethod('constructor', id, func.params, blockStmt);
 	}
 
-	createClassMethod(id: babelTypes.Identifier, func: babelTypes.FunctionDeclaration | babelTypes.FunctionExpression | babelTypes.ArrowFunctionExpression = null): babelTypes.ClassMethod {
+	createClassMethod(id: babelTypes.Identifier, func?: babelTypes.FunctionDeclaration | babelTypes.FunctionExpression | babelTypes.ArrowFunctionExpression): babelTypes.ClassMethod {
 		let body: babelTypes.BlockStatement;
 		if (!func || !func.body) {
 			body = babelTypes.blockStatement([]);
@@ -300,7 +305,7 @@ export class FunctionToClassConverter {
 
 	appendConstructorExprStmt(exprStmt: babelTypes.ExpressionStatement, id: babelTypes.Identifier, copyCommentsFrom: babelTypes.Node): void {
 		this.copyComments(copyCommentsFrom, exprStmt);
-		this.ctor.body.body.push(exprStmt);
+		this.ctor?.body.body.push(exprStmt);
 		this.idMap[id.name] = exprStmt;
 
 		const typeAnnotation = this.getTypeAnnotation((exprStmt.expression as babelTypes.AssignmentExpression).right);
@@ -350,17 +355,19 @@ export class FunctionToClassConverter {
 			traverse(method, {
 				noScope: true,
 				FunctionExpression: (path) => {
-					const funcStmts = path.node.body.body;
 					let arrowFunction: babelTypes.ArrowFunctionExpression;
 
+					const funcStmts = path.node.body.body;
 					const makeFuncExpr = funcStmts.length === 1
 						&& babelTypes.isReturnStatement(funcStmts[0])
+						&& funcStmts[0].argument
 						&& !path.node.leadingComments?.length
 						&& !path.node.innerComments?.length
 						&& !path.node.trailingComments?.length;
 
-					if (makeFuncExpr) {
-						arrowFunction = babelTypes.arrowFunctionExpression(path.node.params, (funcStmts[0] as babelTypes.ReturnStatement).argument);
+					const returnArg = (funcStmts[0] as babelTypes.ReturnStatement).argument;
+					if (makeFuncExpr && returnArg) {
+						arrowFunction = babelTypes.arrowFunctionExpression(path.node.params, returnArg);
 						arrowFunction.expression = true;
 					} else {
 						arrowFunction = babelTypes.arrowFunctionExpression(path.node.params, path.node.body);
@@ -382,6 +389,7 @@ export class FunctionToClassConverter {
 	}
 
 	handleFunctionDeclaration(stmt: babelTypes.FunctionDeclaration) {
+		if (!stmt?.id) return;
 		this.appendClassMethod(this.createClassMethod(stmt.id, stmt), stmt.id, stmt);
 	}
 
@@ -415,6 +423,8 @@ export class FunctionToClassConverter {
 	}
 
 	copyComments(srcNode: babelTypes.Node, destNode: babelTypes.Node): void {
+		if (!srcNode || !destNode) return;
+
 		const leadingComments = srcNode.leadingComments
 			?.filter(comment => !this.copiedComments.some(copied => comment.start === copied));
 
@@ -430,7 +440,7 @@ export class FunctionToClassConverter {
 
 		const trailingComments = srcNode.trailingComments
 			?.filter(comment => !this.copiedComments.some(copied => comment.start === copied))
-			?.filter(c => c.loc.start.line <= srcNode.loc.end.line);
+			?.filter(c => srcNode.loc != null && c.loc.start.line <= srcNode.loc.end.line);
 
 		if (trailingComments?.length) {
 			if (babelTypes.isClassMethod(destNode)) {
@@ -445,7 +455,7 @@ export class FunctionToClassConverter {
 	annotateIdentifier(id: babelTypes.Identifier): void {
 		if (!babelTypes.isIdentifier(id)) return id;
 
-		if (!id.typeAnnotation && angularServices[id.name]) {
+		if (!id.typeAnnotation && angularServices.hasOwnProperty(id.name)) {
 			id.typeAnnotation = babelTypes.tsTypeAnnotation(
 				babelTypes.tsTypeReference(
 					babelTypes.tsQualifiedName(

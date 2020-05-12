@@ -1,0 +1,36 @@
+import * as babelTypes from '@babel/types';
+export declare class FunctionToClassConverter {
+    properties: babelTypes.ClassProperty[];
+    methods: babelTypes.ClassMethod[];
+    ctor?: babelTypes.ClassMethod;
+    onInit?: babelTypes.ClassMethod;
+    idMap: Record<string, babelTypes.Node>;
+    copiedComments: number[];
+    contextAlias?: string;
+    annotateTypes: boolean;
+    private constructor();
+    static convertFunctionToES6Class(source: string): string;
+    static convertFunctionToTypeScriptClass(source: string): string;
+    private static convertFunctionToClass;
+    private static detectIndentation;
+    getLastStatement(block: babelTypes.BlockStatement): babelTypes.Statement | undefined;
+    convertFactory(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration | false;
+    convertConstructor(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration | false;
+    isNamed(node: babelTypes.Node, name: string): node is babelTypes.Identifier;
+    getContextAlias(func: babelTypes.FunctionDeclaration): string;
+    createClassConstructor(func?: babelTypes.FunctionDeclaration): babelTypes.ClassMethod;
+    createClassMethod(id: babelTypes.Identifier, func?: babelTypes.FunctionDeclaration | babelTypes.FunctionExpression | babelTypes.ArrowFunctionExpression): babelTypes.ClassMethod;
+    createAssignmentToThis(id: babelTypes.Identifier, right: babelTypes.Expression): babelTypes.ExpressionStatement;
+    handleObjectProperty(prop: babelTypes.ObjectMethod | babelTypes.ObjectProperty | babelTypes.SpreadElement): void;
+    handleVariableDeclaration(stmt: babelTypes.VariableDeclaration): false | undefined;
+    appendClassMethod(method: babelTypes.ClassMethod, id: babelTypes.Identifier, copyCommentsFrom: babelTypes.Node): void;
+    appendConstructorExprStmt(exprStmt: babelTypes.ExpressionStatement, id: babelTypes.Identifier, copyCommentsFrom: babelTypes.Node): void;
+    convertIdentifiersToMemberExpressions(): void;
+    convertFunctionExpressionsToArrowFunctionExpressions(): void;
+    getRootObject(memberExpr: babelTypes.MemberExpression): babelTypes.Expression;
+    handleFunctionDeclaration(stmt: babelTypes.FunctionDeclaration): void;
+    handleAssignmentExpressionStatement(stmt: babelTypes.ExpressionStatement): void;
+    copyComments(srcNode: babelTypes.Node, destNode: babelTypes.Node): void;
+    annotateIdentifier(id: babelTypes.Identifier): void;
+    getTypeAnnotation(node: babelTypes.Expression): babelTypes.TypeAnnotation | undefined;
+}
