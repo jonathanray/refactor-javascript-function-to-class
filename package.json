@@ -1,0 +1,28 @@
+{
+  "name": "convert-javascript-function-to-class",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": {
+    "name": "Jonathan Ray"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.9.6",
+    "@babel/preset-typescript": "^7.9.0",
+    "@types/babel__traverse": "^7.0.10",
+    "@types/jest": "^25.2.1",
+    "jest": "^26.0.1",
+    "ts-jest": "^25.5.1",
+    "typescript": "^3.8.3"
+  },
+  "dependencies": {
+    "@babel/core": "^7.9.0",
+    "@babel/generator": "^7.9.6",
+    "@babel/parser": "^7.9.6",
+    "@babel/types": "^7.9.6",
+    "@types/lodash": "^4.14.150",
+    "lodash": "^4.17.15"
+  }
+}
