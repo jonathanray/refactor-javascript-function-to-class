@@ -25,10 +25,11 @@ describe('convertFunctionToClass', () => {
 	it('constructor function assigning to "this"', () => {
 		const source = cleanSource(`
 			function TestService($http, someService) {
-				this.something = 'something';
+				var something = 'something';
+				this.something = something;
 		
 				this.doSomething1 = function doSomething1() {
-					return something;
+					return this.something;
 				}
 		
 				var doSomething2 = function doNotUseThisName() {
@@ -55,7 +56,7 @@ describe('convertFunctionToClass', () => {
 				self.something = 'something';
 		
 				self.doSomething1 = function doSomething1() {
-					return something;
+					return this.something;
 				}
 		
 				var doSomething2 = function doNotUseThisName() {

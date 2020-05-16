@@ -49,16 +49,16 @@ class FunctionToClassConverter {
 		const ast = parse(source, parseOptions);
 		if (ast.program.body.length === 0) throw Error('Source is empty');
 
-		const func = ast.program.body[0];
-		if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
+		// const func = ast.program.body[0];
+		// if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
 
 		const converter = new FunctionToClassConverter();
 		converter.annotateTypes = annotateTypes;
 
-		const classDeclaration = converter.convertFunctionToClass(func);
+		const newStmts = converter.convertFunctionToClass(ast.program.body);
 		let output: string;
 		try {
-			output = generate(classDeclaration, babelGeneratorOptions).code;
+			output = newStmts.map(stmt => generate(stmt, babelGeneratorOptions).code).join('\n\n');
 		} catch {
 			throw Error('Failed to convert function to class');
 		}
@@ -114,13 +114,16 @@ class FunctionToClassConverter {
 		}
 	}
 
-	convertFunctionToClass(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration {
-		const lastStmt = this.getLastStatement(func.body);
+	convertFunctionToClass(stmts: babelTypes.Statement[]): babelTypes.Statement[] {
+		const func = stmts[0];
+		if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
 
-		if (babelTypes.isReturnStatement(lastStmt)) {
-			if (babelTypes.isIdentifier(lastStmt.argument)) {
-				this.contextAlias = lastStmt.argument.name;
-			} else if (!babelTypes.isObjectExpression(lastStmt.argument)) {
+		const lastStmtInsideFunc = this.getLastStatement(func.body);
+
+		if (babelTypes.isReturnStatement(lastStmtInsideFunc)) {
+			if (babelTypes.isIdentifier(lastStmtInsideFunc.argument)) {
+				this.contextAlias = lastStmtInsideFunc.argument.name;
+			} else if (!babelTypes.isObjectExpression(lastStmtInsideFunc.argument)) {
 				throw Error('Function has a return statement but does not appear to be a factory function.');
 			}
 		} else {
@@ -138,13 +141,22 @@ class FunctionToClassConverter {
 				this.handleFunctionDeclaration(stmt);
 			} else if (babelTypes.isExpressionStatement(stmt)) {
 				this.handleExpressionStatement(stmt);
-			} else if (stmt === lastStmt && babelTypes.isReturnStatement(stmt) && babelTypes.isObjectExpression(stmt.argument)) {
+			} else if (stmt === lastStmtInsideFunc && babelTypes.isReturnStatement(stmt) && babelTypes.isObjectExpression(stmt.argument)) {
 				for (const prop of stmt.argument.properties) {
 					this.handleObjectProperty(prop);
 				}
-			} else if (stmt !== lastStmt) {
+			} else if (stmt !== lastStmtInsideFunc) {
 				this.ctor.body.body.push(stmt);
 			}
+		}
+
+		const newStmts: babelTypes.Statement[] = [];
+		for (let index = 1; index < stmts.length; index++) {
+			const stmt = stmts[index];
+			if (babelTypes.isExpressionStatement(stmt)) {
+				if (this.handleAssignmentExpressionStatement(stmt, func.id?.name)) continue;
+			}
+			newStmts.push(stmt);
 		}
 
 		this.properties = sortBy(this.properties, p => (p.key as babelTypes.Identifier).name);
@@ -161,18 +173,20 @@ class FunctionToClassConverter {
 		this.convertIdentifiersToMemberExpressions();
 		this.convertFunctionExpressionsToArrowFunctionExpressions();
 
-		const stmts: Array<babelTypes.ClassProperty | babelTypes.ClassMethod> = [];
-		stmts.push(...this.properties);
-		stmts.push(...this.methods);
-
-		const body = babelTypes.classBody(stmts);
+		const body = babelTypes.classBody([...this.properties, ...this.methods]);
 		const classDeclaration = babelTypes.classDeclaration(func.id, null, body, null);
 
-		return classDeclaration;
+		newStmts.push(classDeclaration);
+		return newStmts;
 	}
 
 	isNamedIdentifier(node: babelTypes.Node, name: string): node is babelTypes.Identifier {
 		return babelTypes.isIdentifier(node) && node.name === name;
+	}
+
+	isNamedMemberExpr(memberExpr: babelTypes.Expression, objName: string, propName: string): memberExpr is babelTypes.MemberExpression {
+		if (!babelTypes.isMemberExpression(memberExpr)) return false;
+		return this.isNamedIdentifier(memberExpr.object, objName) && this.isNamedIdentifier(memberExpr.property, propName);
 	}
 
 	getContextAlias(func: babelTypes.FunctionDeclaration): string {
@@ -368,33 +382,37 @@ class FunctionToClassConverter {
 		this.ctor?.body.body.push(stmt);
 	}
 
-	handleAssignmentExpressionStatement(stmt: babelTypes.ExpressionStatement) {
-		if (!babelTypes.isExpressionStatement(stmt)) return;
-		if (!babelTypes.isAssignmentExpression(stmt.expression)) return;
+	handleAssignmentExpressionStatement(stmt: babelTypes.ExpressionStatement, className?: string): boolean {
+		if (!babelTypes.isExpressionStatement(stmt)) return false;
+		if (!babelTypes.isAssignmentExpression(stmt.expression)) return false;
 
 		const left = stmt.expression.left;
-		if (!babelTypes.isMemberExpression(left)) return;
-		if (!babelTypes.isIdentifier(left.property)) return;
-		if (!babelTypes.isThisExpression(left.object) && !(this.contextAlias && this.isNamedIdentifier(left.object, this.contextAlias))) return;
+		if (!babelTypes.isMemberExpression(left)) return false;
+		if (!babelTypes.isIdentifier(left.property)) return false;
+		if (!babelTypes.isThisExpression(left.object)
+			&& !(this.contextAlias && this.isNamedIdentifier(left.object, this.contextAlias))
+			&& !(className && this.isNamedMemberExpr(left.object, className, 'prototype'))) return false;
 
 		const right = stmt.expression.right;
 		const leftId = left.property;
 		if (babelTypes.isFunctionExpression(right) || babelTypes.isArrowFunctionExpression(right)) {
 			this.appendClassMethod(this.createClassMethod(leftId, right), left.property, stmt);
-			return;
+			return true;
 		}
 
 		if (babelTypes.isLiteral(right)) {
 			this.appendConstructorExprStmt(this.createAssignmentToThis(leftId, right), leftId, stmt);
-			return;
+			return true;
 		}
 
 		if (babelTypes.isIdentifier(right)) {
 			if (right.name === leftId.name && this.idMap[leftId.name]) {
 				this.copyComments(stmt, this.idMap[leftId.name]);
-				return;
+				return true;
 			}
 		}
+
+		return false;
 	}
 
 	copyComments(srcNode: babelTypes.Node, destNode: babelTypes.Node): void {
