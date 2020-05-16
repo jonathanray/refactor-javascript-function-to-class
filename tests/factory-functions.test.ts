@@ -16,6 +16,8 @@ describe('convertFunctionToClass', () => {
 					});
 				}
 
+				doSomething1();
+
 				return {
 					doSomething3: function () {},
 					testAngular: testAngular,
@@ -34,6 +36,7 @@ describe('convertFunctionToClass', () => {
 
 				constructor(private $http: ng.IHttpService, private someService) {
 					this.something = 'something';
+					this.doSomething1();
 				}
 			
 				doSomething1() {

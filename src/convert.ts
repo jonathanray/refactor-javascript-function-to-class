@@ -32,7 +32,7 @@ class FunctionToClassConverter {
 	properties: babelTypes.ClassProperty[] = [];
 	methods: babelTypes.ClassMethod[] = [];
 	ctor?: babelTypes.ClassMethod;
-	onInit?: babelTypes.ClassMethod;
+	// onInit?: babelTypes.ClassMethod;
 	idMap: Record<string, babelTypes.Node> = {};
 	copiedComments: number[] = [];
 	contextAlias?: string;
@@ -43,27 +43,32 @@ class FunctionToClassConverter {
 	}
 
 	static convertFunctionToClass(source: string, annotateTypes: boolean): string {
-		if (!source?.trim()) return source;
-		if (source.trim().indexOf('function') === -1) return source; //throw Error('Source is not a function');
+		if (!source?.trim()) throw Error('Source is empty');
+		if (source.trim().indexOf('function') === -1) throw Error('Source is not a function');
 
 		const ast = parse(source, parseOptions);
-		if (ast.program.body.length === 0) return source;
+		if (ast.program.body.length === 0) throw Error('Source is empty');
 
 		const func = ast.program.body[0];
-		if (!babelTypes.isFunctionDeclaration(func)) return source;
+		if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
 
 		const converter = new FunctionToClassConverter();
 		converter.annotateTypes = annotateTypes;
 
-		const classDeclaration = converter.convertFactory(func) || converter.convertConstructor(func);
-		if (!classDeclaration) {
+		const classDeclaration = converter.convertFunctionToClass(func);
+		let output: string;
+		try {
+			output = generate(classDeclaration, babelGeneratorOptions).code;
+		} catch {
 			throw Error('Failed to convert function to class');
 		}
 
-		let output: string = generate(classDeclaration, babelGeneratorOptions).code;
-
-		// babel generator doesn't allow formatting options. No need to use prettier just for indentation.
-		output = FunctionToClassConverter.indentLikeSource(source, output);
+		try {
+			// babel generator doesn't allow formatting options. No need to use prettier just for indentation.
+			output = FunctionToClassConverter.indentLikeSource(source, output);
+		} catch {
+			// Ignore error when indenting since it won't change the functionality
+		}
 
 		return output;
 	}
@@ -109,42 +114,45 @@ class FunctionToClassConverter {
 		}
 	}
 
-	convertFactory(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration | false {
+	convertFunctionToClass(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration {
 		const lastStmt = this.getLastStatement(func.body);
 
-		if (!babelTypes.isReturnStatement(lastStmt)) return false;
-
-		if (babelTypes.isIdentifier(lastStmt.argument)) {
-			this.contextAlias = lastStmt.argument.name;
-		} else if (!babelTypes.isObjectExpression(lastStmt.argument)) {
-			return false;
+		if (babelTypes.isReturnStatement(lastStmt)) {
+			if (babelTypes.isIdentifier(lastStmt.argument)) {
+				this.contextAlias = lastStmt.argument.name;
+			} else if (!babelTypes.isObjectExpression(lastStmt.argument)) {
+				throw Error('Function has a return statement but does not appear to be a factory function.');
+			}
+		} else {
+			this.contextAlias = this.getContextAlias(func);
 		}
 
 		this.ctor = this.createClassConstructor(func);
-		this.onInit = this.createClassMethod(babelTypes.identifier('$onInit'));
+		// this.onInit = this.createClassMethod(babelTypes.identifier('$onInit'));
 
 		for (let index = 0; index < func.body.body.length; index++) {
-			// const comments = func.body.body[index-1]?.comm;
 			const stmt = func.body.body[index];
 			if (babelTypes.isVariableDeclaration(stmt)) {
 				this.handleVariableDeclaration(stmt);
 			} else if (babelTypes.isFunctionDeclaration(stmt)) {
 				this.handleFunctionDeclaration(stmt);
 			} else if (babelTypes.isExpressionStatement(stmt)) {
-				this.handleAssignmentExpressionStatement(stmt);
+				this.handleExpressionStatement(stmt);
 			} else if (stmt === lastStmt && babelTypes.isReturnStatement(stmt) && babelTypes.isObjectExpression(stmt.argument)) {
 				for (const prop of stmt.argument.properties) {
 					this.handleObjectProperty(prop);
 				}
+			} else if (stmt !== lastStmt) {
+				this.ctor.body.body.push(stmt);
 			}
 		}
 
 		this.properties = sortBy(this.properties, p => (p.key as babelTypes.Identifier).name);
 		this.methods = sortBy(this.methods, m => (m.key as babelTypes.Identifier).name);
 
-		if (this.onInit.body.body.length > 0) {
-			this.methods.unshift(this.ctor);
-		}
+		// if (this.onInit.body.body.length > 0) {
+		// 	this.methods.unshift(this.ctor);
+		// }
 
 		if (this.ctor.body.body.length > 0 || this.ctor.params.length > 0) {
 			this.methods.unshift(this.ctor);
@@ -163,51 +171,7 @@ class FunctionToClassConverter {
 		return classDeclaration;
 	}
 
-	convertConstructor(func: babelTypes.FunctionDeclaration): babelTypes.ClassDeclaration | false {
-		this.contextAlias = this.getContextAlias(func);
-
-		this.ctor = this.createClassConstructor(func);
-		this.onInit = this.createClassMethod(babelTypes.identifier('$onInit'));
-
-		for (let index = 0; index < func.body.body.length; index++) {
-			// const comments = func.body.body[index-1]?.comm;
-			const stmt = func.body.body[index];
-			if (babelTypes.isVariableDeclaration(stmt)) {
-				this.handleVariableDeclaration(stmt);
-			} else if (babelTypes.isFunctionDeclaration(stmt)) {
-				this.handleFunctionDeclaration(stmt);
-			} else if (babelTypes.isExpressionStatement(stmt)) {
-				this.handleAssignmentExpressionStatement(stmt);
-			} else {
-				debugger;
-			}
-		}
-
-		this.properties = sortBy(this.properties, p => (p.key as babelTypes.Identifier).name);
-		this.methods = sortBy(this.methods, m => (m.key as babelTypes.Identifier).name);
-
-		if (this.onInit.body.body.length > 0) {
-			this.methods.unshift(this.onInit);
-		}
-
-		if (this.ctor.body.body.length > 0) {
-			this.methods.unshift(this.ctor);
-		}
-
-		this.convertIdentifiersToMemberExpressions();
-		this.convertFunctionExpressionsToArrowFunctionExpressions();
-
-		const stmts: Array<babelTypes.ClassProperty | babelTypes.ClassMethod> = [];
-		stmts.push(...this.properties);
-		stmts.push(...this.methods);
-
-		const body = babelTypes.classBody(stmts);
-		const classDeclaration = babelTypes.classDeclaration(func.id, null, body, null);
-
-		return classDeclaration;
-	}
-
-	isNamed(node: babelTypes.Node, name: string): node is babelTypes.Identifier {
+	isNamedIdentifier(node: babelTypes.Node, name: string): node is babelTypes.Identifier {
 		return babelTypes.isIdentifier(node) && node.name === name;
 	}
 
@@ -274,12 +238,6 @@ class FunctionToClassConverter {
 			this.appendClassMethod(this.createClassMethod(prop.key, prop.value), prop.key, prop);
 		} else if (babelTypes.isLiteral(prop.value)) {
 			this.appendConstructorExprStmt(this.createAssignmentToThis(prop.key, prop.value), prop.key, prop);
-		} else if (babelTypes.isIdentifier(prop.value)) {
-			if (!this.idMap[prop.key.name]) {
-				debugger;
-			}
-		} else {
-			debugger; // What else is there?
 		}
 	}
 
@@ -399,6 +357,17 @@ class FunctionToClassConverter {
 		this.appendClassMethod(this.createClassMethod(stmt.id, stmt), stmt.id, stmt);
 	}
 
+	handleExpressionStatement(stmt: babelTypes.ExpressionStatement) {
+		if (!babelTypes.isExpressionStatement(stmt)) return;
+
+		if (babelTypes.isAssignmentExpression(stmt.expression)) {
+			this.handleAssignmentExpressionStatement(stmt);
+			return;
+		}
+
+		this.ctor?.body.body.push(stmt);
+	}
+
 	handleAssignmentExpressionStatement(stmt: babelTypes.ExpressionStatement) {
 		if (!babelTypes.isExpressionStatement(stmt)) return;
 		if (!babelTypes.isAssignmentExpression(stmt.expression)) return;
@@ -406,7 +375,7 @@ class FunctionToClassConverter {
 		const left = stmt.expression.left;
 		if (!babelTypes.isMemberExpression(left)) return;
 		if (!babelTypes.isIdentifier(left.property)) return;
-		if (!babelTypes.isThisExpression(left.object) && !(this.contextAlias && this.isNamed(left.object, this.contextAlias))) return;
+		if (!babelTypes.isThisExpression(left.object) && !(this.contextAlias && this.isNamedIdentifier(left.object, this.contextAlias))) return;
 
 		const right = stmt.expression.right;
 		const leftId = left.property;
