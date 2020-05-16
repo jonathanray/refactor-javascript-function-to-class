@@ -1,10 +1,5 @@
 import { convertFunctionToClass } from '../src/convert';
 
-const options = {
-	annotateTypes: true,
-	angularJs: true
-};
-
 describe('convertFunctionToClass', () => {
 	const source = cleanSource(`
 			function TestService($http, someService) {
@@ -21,14 +16,14 @@ describe('convertFunctionToClass', () => {
 				return someConstant;
 			}`);
 
-	it('constructor function with prototype methods', () => {
+	it('Without type annotations (no TypeScript)', () => {
 		const expected = cleanSource(`
 			var someConstant = 'Hello World';
 			
 			class TestService {
-				something: string;
+				something;
 
-				constructor(private $http: ng.IHttpService, private someService) {
+				constructor($http, someService) {
 					this.something = 'something';
 				}
 			
@@ -40,6 +35,41 @@ describe('convertFunctionToClass', () => {
 					return this.doSomething1();
 				}
 			}`);
+
+		const options = {
+			annotateTypes: false,
+			angularJs: true
+		};
+
+		const result = convertFunctionToClass(source, options).trim();
+		expect(result).toBe(expected);
+	});
+
+	it('With type annotations but without AngularJS service name matching', () => {
+		const expected = cleanSource(`
+			var someConstant = 'Hello World';
+			
+			class TestService {
+				something: string;
+
+				constructor(private $http, private someService) {
+					this.something = 'something';
+				}
+			
+				doSomething1() {
+					return someConstant;
+				}
+			
+				doSomething2() {
+					return this.doSomething1();
+				}
+			}`);
+
+
+		const options = {
+			annotateTypes: true,
+			angularJs: false
+		};
 
 		const result = convertFunctionToClass(source, options).trim();
 		expect(result).toBe(expected);

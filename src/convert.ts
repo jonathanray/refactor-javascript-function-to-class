@@ -17,7 +17,7 @@ const babelGeneratorOptions: GeneratorOptions = {
 	comments: true
 };
 
-const angularServices: Record<string, string> = {
+const angularJsTypes: Record<string, string> = {
 	$document: 'IDocumentService',
 	$http: 'IHttpService',
 	$interval: 'IIntervalService',
@@ -28,6 +28,16 @@ const angularServices: Record<string, string> = {
 	$window: 'IWindowService'
 };
 
+export interface FunctionToClassConverterOptions {
+	annotateTypes?: boolean;
+	angularJs?: boolean;
+};
+
+const defaultOptions: FunctionToClassConverterOptions = {
+	annotateTypes: false,
+	angularJs: false
+};
+
 class FunctionToClassConverter {
 	properties: babelTypes.ClassProperty[] = [];
 	methods: babelTypes.ClassMethod[] = [];
@@ -36,13 +46,12 @@ class FunctionToClassConverter {
 	idMap: Record<string, babelTypes.Node> = {};
 	copiedComments: number[] = [];
 	contextAlias?: string;
-	annotateTypes: boolean = false;
 
-	private constructor() {
+	private constructor(private readonly options: FunctionToClassConverterOptions = defaultOptions) {
 		// Cannot be publicly constructed
 	}
 
-	static convertFunctionToClass(source: string, annotateTypes: boolean): string {
+	static convertFunctionToClass(source: string, options?: FunctionToClassConverterOptions): string {
 		if (!source?.trim()) throw Error('Source is empty');
 		if (source.trim().indexOf('function') === -1) throw Error('Source is not a function');
 
@@ -52,13 +61,12 @@ class FunctionToClassConverter {
 		// const func = ast.program.body[0];
 		// if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
 
-		const converter = new FunctionToClassConverter();
-		converter.annotateTypes = annotateTypes;
+		const converter = new FunctionToClassConverter(options);
+		const stmts = converter.convertFunctionToClass(ast.program.body);
 
-		const newStmts = converter.convertFunctionToClass(ast.program.body);
 		let output: string;
 		try {
-			output = newStmts.map(stmt => generate(stmt, babelGeneratorOptions).code).join('\n\n');
+			output = stmts.map(stmt => generate(stmt, babelGeneratorOptions).code).join('\n\n');
 		} catch {
 			throw Error('Failed to convert function to class');
 		}
@@ -211,15 +219,17 @@ class FunctionToClassConverter {
 			return babelTypes.classMethod('constructor', id, [], blockStmt);
 		}
 
-		for (let index = 0; index < func.params.length; index++) {
-			const param = func.params[index];
-			if (babelTypes.isIdentifier(param)) {
-				this.idMap[param.name] = param;
-				this.annotateIdentifier(param);
+		if (this.options.annotateTypes) {
+			for (let index = 0; index < func.params.length; index++) {
+				const param = func.params[index];
+				if (babelTypes.isIdentifier(param)) {
+					this.idMap[param.name] = param;
+					this.annotateIdentifier(param);
 
-				const paramProperty = babelTypes.tsParameterProperty(param);
-				paramProperty.accessibility = 'private';
-				func.params[index] = paramProperty;
+					const paramProperty = babelTypes.tsParameterProperty(param);
+					paramProperty.accessibility = 'private';
+					func.params[index] = paramProperty;
+				}
 			}
 		}
 
@@ -286,7 +296,9 @@ class FunctionToClassConverter {
 		this.ctor?.body.body.push(exprStmt);
 		this.idMap[id.name] = exprStmt;
 
-		const typeAnnotation = this.getTypeAnnotation((exprStmt.expression as babelTypes.AssignmentExpression).right);
+		const typeAnnotation = this.options.annotateTypes
+			? this.getTypeAnnotation((exprStmt.expression as babelTypes.AssignmentExpression).right)
+			: undefined;
 		const property = babelTypes.classProperty(id, undefined, typeAnnotation);
 		this.properties.push(property);
 	}
@@ -446,14 +458,15 @@ class FunctionToClassConverter {
 	}
 
 	annotateIdentifier(id: babelTypes.Identifier): void {
-		if (!babelTypes.isIdentifier(id)) return id;
+		if (!this.options.annotateTypes) return;
+		if (!babelTypes.isIdentifier(id)) return;
 
-		if (!id.typeAnnotation && angularServices.hasOwnProperty(id.name)) {
+		if (this.options.angularJs && !id.typeAnnotation && angularJsTypes.hasOwnProperty(id.name)) {
 			id.typeAnnotation = babelTypes.tsTypeAnnotation(
 				babelTypes.tsTypeReference(
 					babelTypes.tsQualifiedName(
 						babelTypes.identifier('ng'),
-						babelTypes.identifier(angularServices[id.name]))));
+						babelTypes.identifier(angularJsTypes[id.name]))));
 		}
 	}
 
@@ -473,6 +486,6 @@ class FunctionToClassConverter {
 	}
 }
 
-export function convertFunctionToClass(source: string, annotateTypes: boolean): string {
-	return FunctionToClassConverter.convertFunctionToClass(source, annotateTypes);
+export function convertFunctionToClass(source: string, options?: FunctionToClassConverterOptions): string {
+	return FunctionToClassConverter.convertFunctionToClass(source, options);
 }

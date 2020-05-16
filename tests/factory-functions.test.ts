@@ -1,5 +1,10 @@
 import { convertFunctionToClass } from '../src/convert';
 
+const options = {
+	annotateTypes: true,
+	angularJs: true
+};
+
 describe('convertFunctionToClass', () => {
 	it('factory function that returns object expression', () => {
 		const source = cleanSource(`
@@ -54,7 +59,7 @@ describe('convertFunctionToClass', () => {
 				}
 			}`);
 
-		const result = convertFunctionToClass(source, true).trim();
+		const result = convertFunctionToClass(source, options).trim();
 		expect(result).toBe(expected);
 	});
 
@@ -118,7 +123,7 @@ describe('convertFunctionToClass', () => {
 				}
 			}`);
 
-		const result = convertFunctionToClass(source, true).trim();
+		const result = convertFunctionToClass(source, options).trim();
 		expect(result).toBe(expected);
 	});
 });
