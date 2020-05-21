@@ -8,7 +8,7 @@ const options = {
 describe('convertFunctionToClass', () => {
 	it('factory function that returns object expression', () => {
 		const source = cleanSource(`
-			function TestService($http, someService) {
+			function TestService($http, unusedService) {
 				var something = 'something';
 			
 				var doSomething2 = function doNotUseThisName() {
@@ -39,7 +39,7 @@ describe('convertFunctionToClass', () => {
 			class TestService {
 				something: string;
 
-				constructor(private $http: ng.IHttpService, private someService) {
+				constructor(private $http: ng.IHttpService, unusedService) {
 					this.something = 'something';
 					this.doSomething1();
 				}
@@ -69,7 +69,7 @@ describe('convertFunctionToClass', () => {
 				var service = {};
 
 				// Comment in constructor
-				var something = 'something';
+				var something = someService.getSomething();
 			
 				var doSomething2 = function doNotUseThisName() {
 					return something;
@@ -96,10 +96,10 @@ describe('convertFunctionToClass', () => {
 
 		const expected = cleanSource(`
 			class TestService {
-				something: string;
+				something;
 			
-				constructor(private $http: ng.IHttpService, private someService) {
-					this.something = 'something';
+				constructor(private $http: ng.IHttpService, someService) {
+					this.something = someService.getSomething();
 				}
 			
 				doSomething1() {
@@ -120,6 +120,49 @@ describe('convertFunctionToClass', () => {
 				 */
 				testAngular() {
 					return this.$http.get('http://').then(response => response.data);
+				}
+			}`);
+
+		const result = convertFunctionToClass(source, options).trim();
+		expect(result).toBe(expected);
+	});
+
+	it('factory function that initializes a shared variable', () => {
+		const source = cleanSource(`
+			function TestService(someFactory, someService) {
+				var something1 = someFactory();
+				var something2 = new someService();
+				var something3 = something2.something();
+
+				return {
+					getSomething: function () {
+						return {
+							something1: something1,
+							something2: something2,
+							something3: something3
+						};
+					}
+				}
+			}`);
+
+		const expected = cleanSource(`
+			class TestService {
+				something1;
+				something2;
+				something3;
+
+				constructor(someFactory, someService) {
+					this.something1 = someFactory();
+					this.something2 = new someService();
+					this.something3 = this.something2.something();
+				}
+
+				getSomething() {
+					return {
+						something1,
+						something2,
+						something3
+					};
 				}
 			}`);
 

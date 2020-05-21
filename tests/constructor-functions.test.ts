@@ -10,7 +10,7 @@ describe('convertFunctionToClass', () => {
 			class TestService {
 				something: string;
 
-				constructor(private $http: ng.IHttpService, private someService) {
+				constructor(private $http: ng.IHttpService, unusedService) {
 					this.something = 'something';
 				}
 			
@@ -29,7 +29,7 @@ describe('convertFunctionToClass', () => {
 
 	it('constructor function assigning to "this"', () => {
 		const source = cleanSource(`
-			function TestService($http, someService) {
+			function TestService($http, unusedService) {
 				var something = 'something';
 				this.something = something;
 		
@@ -56,7 +56,7 @@ describe('convertFunctionToClass', () => {
 
 	it('constructor function assigning to "this"', () => {
 		const source = cleanSource(`
-			function TestService($http, someService) {
+			function TestService($http, unusedService) {
 				var self = this;
 				self.something = 'something';
 		

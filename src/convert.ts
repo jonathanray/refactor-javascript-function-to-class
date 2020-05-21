@@ -41,13 +41,16 @@ const defaultOptions: FunctionToClassConverterOptions = {
 class FunctionToClassConverter {
 	properties: babelTypes.ClassProperty[] = [];
 	methods: babelTypes.ClassMethod[] = [];
-	ctor?: babelTypes.ClassMethod;
-	// onInit?: babelTypes.ClassMethod;
 	idMap: Record<string, babelTypes.Node> = {};
 	copiedComments: number[] = [];
 	contextAlias?: string;
 
-	private constructor(private readonly options: FunctionToClassConverterOptions = defaultOptions) {
+	// @ts-ignore this.ctor is constructed in convertFunctionToClass
+	ctor: babelTypes.ClassMethod;
+
+	private constructor(
+		private readonly options: FunctionToClassConverterOptions = defaultOptions
+	) {
 		// Cannot be publicly constructed
 	}
 
@@ -57,9 +60,6 @@ class FunctionToClassConverter {
 
 		const ast = parse(source, parseOptions);
 		if (ast.program.body.length === 0) throw Error('Source is empty');
-
-		// const func = ast.program.body[0];
-		// if (!babelTypes.isFunctionDeclaration(func)) throw Error('Source is not a function');
 
 		const converter = new FunctionToClassConverter(options);
 		const stmts = converter.convertFunctionToClass(ast.program.body);
@@ -139,7 +139,6 @@ class FunctionToClassConverter {
 		}
 
 		this.ctor = this.createClassConstructor(func);
-		// this.onInit = this.createClassMethod(babelTypes.identifier('$onInit'));
 
 		for (let index = 0; index < func.body.body.length; index++) {
 			const stmt = func.body.body[index];
@@ -170,16 +169,14 @@ class FunctionToClassConverter {
 		this.properties = sortBy(this.properties, p => (p.key as babelTypes.Identifier).name);
 		this.methods = sortBy(this.methods, m => (m.key as babelTypes.Identifier).name);
 
-		// if (this.onInit.body.body.length > 0) {
-		// 	this.methods.unshift(this.ctor);
-		// }
-
 		if (this.ctor.body.body.length > 0 || this.ctor.params.length > 0) {
 			this.methods.unshift(this.ctor);
 		}
 
-		this.convertIdentifiersToMemberExpressions();
+		const convertedIds = this.convertIdentifiersToMemberExpressions();
+		this.removePrivateKeywordFromUnusedConstructorParams(convertedIds);
 		this.convertFunctionExpressionsToArrowFunctionExpressions();
+		this.removeRedundantObjectProperty();
 
 		const body = babelTypes.classBody([...this.properties, ...this.methods]);
 		const classDeclaration = babelTypes.classDeclaration(func.id, null, body, null);
@@ -189,6 +186,7 @@ class FunctionToClassConverter {
 	}
 
 	isNamedIdentifier(node: babelTypes.Node, name: string): node is babelTypes.Identifier {
+		if (babelTypes.isTSParameterProperty(node)) return this.isNamedIdentifier(node.parameter, name);
 		return babelTypes.isIdentifier(node) && node.name === name;
 	}
 
@@ -269,9 +267,7 @@ class FunctionToClassConverter {
 		for (const varDec of stmt.declarations) {
 			if (!babelTypes.isIdentifier(varDec.id)) throw Error('Variable Declarator ID is not Identifier type');
 
-			if (babelTypes.isLiteral(varDec.init)) {
-				this.appendConstructorExprStmt(this.createAssignmentToThis(varDec.id, varDec.init), varDec.id, varDec);
-			} else if (babelTypes.isFunctionExpression(varDec.init)) {
+			if (babelTypes.isFunctionExpression(varDec.init)) {
 				this.appendClassMethod(this.createClassMethod(varDec.id, varDec.init), varDec.id, varDec);
 			} else if (babelTypes.isIdentifier(varDec.id) && varDec.id.name === this.contextAlias) {
 				if (!babelTypes.isObjectExpression(varDec.init)) return false;
@@ -279,8 +275,10 @@ class FunctionToClassConverter {
 				for (const prop of varDec.init.properties) {
 					this.handleObjectProperty(prop);
 				}
+			} else if (babelTypes.isExpression(varDec.init)) {
+				this.appendConstructorExprStmt(this.createAssignmentToThis(varDec.id, varDec.init), varDec.id, varDec);
 			} else {
-				debugger;
+				throw Error('Unexpected variable declarator');
 			}
 		}
 	}
@@ -293,7 +291,7 @@ class FunctionToClassConverter {
 
 	appendConstructorExprStmt(exprStmt: babelTypes.ExpressionStatement, id: babelTypes.Identifier, copyCommentsFrom: babelTypes.Node): void {
 		this.copyComments(copyCommentsFrom, exprStmt);
-		this.ctor?.body.body.push(exprStmt);
+		this.ctor.body.body.push(exprStmt);
 		this.idMap[id.name] = exprStmt;
 
 		const typeAnnotation = this.options.annotateTypes
@@ -303,26 +301,33 @@ class FunctionToClassConverter {
 		this.properties.push(property);
 	}
 
-	convertIdentifiersToMemberExpressions(): void {
+	convertIdentifiersToMemberExpressions(): string[] {
+		const convertedIds: string[] = [];
+
 		for (const method of this.methods) {
 			traverse(method, {
 				noScope: true,
 				Identifier: (path) => {
 					if (!this.idMap[path.node.name]) return;
 					const parent = path.parent;
+					if (babelTypes.isObjectProperty(parent)) return;
 					if (babelTypes.isClassMethod(parent)) return;
 					if (babelTypes.isTSParameterProperty(parent)) return;
 					if (babelTypes.isMemberExpression(parent)) return;
+					if (method.params?.some(p => this.isNamedIdentifier(p, path.node.name))) return;
 
 					const memberExpr = babelTypes.memberExpression(babelTypes.thisExpression(), path.node);
+					convertedIds.push(path.node.name);
 					path.replaceWith(memberExpr);
 				},
 				MemberExpression: (path) => {
 					const obj = path.node.object;
 					if (!babelTypes.isIdentifier(obj)) return;
+					if (method.params?.some(p => this.isNamedIdentifier(p, obj.name))) return;
 
 					if (obj.name === this.contextAlias) {
 						const memberExpr = babelTypes.memberExpression(babelTypes.thisExpression(), path.node.property);
+						convertedIds.push(obj.name);
 						path.replaceWith(memberExpr);
 						return;
 					}
@@ -331,12 +336,15 @@ class FunctionToClassConverter {
 						const memberExpr = babelTypes.memberExpression(
 							babelTypes.memberExpression(babelTypes.thisExpression(), path.node.object),
 							path.node.property);
+						convertedIds.push(obj.name);
 						path.replaceWith(memberExpr);
 						return;
 					}
 				}
 			});
 		}
+
+		return uniq(convertedIds);
 	}
 
 
@@ -370,6 +378,33 @@ class FunctionToClassConverter {
 		}
 	}
 
+	removePrivateKeywordFromUnusedConstructorParams(convertedIds: string[]): void {
+		if (convertedIds.length === 0) return;
+		this.ctor.params
+			.forEach(param => {
+				if (!babelTypes.isTSParameterProperty(param))
+					return;
+				if (!babelTypes.isIdentifier(param.parameter))
+					return;
+				if (convertedIds.includes(param.parameter.name))
+					return;
+				param.accessibility = null;
+			});
+	}
+
+	removeRedundantObjectProperty() {
+		for (const method of this.methods) {
+			traverse(method, {
+				noScope: true,
+				ObjectProperty: (path) => {
+					if (!this.isNamedIdentifier(path.node.value, path.node.key.name)) return;
+
+					path.node.shorthand = true;
+				}
+			});
+		}
+	}
+
 	getRootObject(memberExpr: babelTypes.MemberExpression): babelTypes.Expression {
 		let obj = memberExpr.object;
 		while (babelTypes.isMemberExpression(obj)) {
@@ -391,7 +426,7 @@ class FunctionToClassConverter {
 			return;
 		}
 
-		this.ctor?.body.body.push(stmt);
+		this.ctor.body.body.push(stmt);
 	}
 
 	handleAssignmentExpressionStatement(stmt: babelTypes.ExpressionStatement, className?: string): boolean {
