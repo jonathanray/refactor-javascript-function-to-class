@@ -327,7 +327,7 @@ class FunctionToClassConverter {
 						return;
 					}
 
-					if (this.idMap[obj.name]) {
+					if (this.idMap[obj.name] && !babelTypes.isMemberExpression(path.node.property)) {
 						const memberExpr = babelTypes.memberExpression(
 							babelTypes.memberExpression(babelTypes.thisExpression(), path.node.object),
 							path.node.property);
