@@ -64,17 +64,12 @@ class FunctionToClassConverter {
 		const converter = new FunctionToClassConverter(options);
 		const stmts = converter.convertFunctionToClass(ast.program.body);
 
-		let output: string;
-		try {
-			output = stmts.map(stmt => generate(stmt, babelGeneratorOptions).code).join('\n\n');
-		} catch {
-			throw Error('Failed to convert function to class');
-		}
-
+		let output = stmts.map(stmt => generate(stmt, babelGeneratorOptions).code).join('\n\n');
 		try {
 			// babel generator doesn't allow formatting options. No need to use prettier just for indentation.
 			output = FunctionToClassConverter.indentLikeSource(source, output);
-		} catch {
+		} catch (ex) {
+			debugger;
 			// Ignore error when indenting since it won't change the functionality
 		}
 
@@ -152,7 +147,7 @@ class FunctionToClassConverter {
 				for (const prop of stmt.argument.properties) {
 					this.handleObjectProperty(prop);
 				}
-			} else if (stmt !== lastStmtInsideFunc) {
+			} else if (stmt !== lastStmtInsideFunc && !babelTypes.isEmptyStatement(stmt)) {
 				this.ctor.body.body.push(stmt);
 			}
 		}
